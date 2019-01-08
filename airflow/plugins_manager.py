@@ -180,7 +180,7 @@ class PluginsManager(object):
 
         for p in self._plugins:
             operators_modules.append(
-                self._make_module('airflow.operators.' + p.name, p.operators + p.sensors))
+                )
             sensors_modules.append(
                 self._make_module('airflow.sensors.' + p.name, p.sensors))
             hooks_modules.append(
