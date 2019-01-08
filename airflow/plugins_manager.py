@@ -114,87 +114,126 @@ def is_valid_plugin(plugin_obj, existing_plugins):
     return False
 
 
-plugins_folder = configuration.conf.get('core', 'plugins_folder')
-if not plugins_folder:
-    plugins_folder = configuration.conf.get('core', 'airflow_home') + '/plugins'
-plugins_folder = os.path.expanduser(plugins_folder)
+class PluginsManager(object):
+    def __init__(self, configuration):
+        self._conf = configuration
+        self._plugins = []
 
-if plugins_folder not in sys.path:
-    sys.path.append(plugins_folder)
+        self._plugins_folder = self._conf.get('core', 'plugins_folder')
+        if not self._plugins_folder:
+            self._plugins_folder = self._conf.get('core', 'airflow_home') + '/plugins'
+        self._plugins_folder = os.path.expanduser(self._plugins_folder)
 
-plugins = []
+        if self._plugins_folder not in sys.path:
+            sys.path.append(self._plugins_folder)
 
-norm_pattern = re.compile(r'[/|.]')
+    def load_plugins_from_disk(self):
 
-# Crawl through the plugins folder to find AirflowPlugin derivatives
-for root, dirs, files in os.walk(plugins_folder, followlinks=True):
-    for f in files:
-        try:
-            filepath = os.path.join(root, f)
-            if not os.path.isfile(filepath):
-                continue
-            mod_name, file_ext = os.path.splitext(
-                os.path.split(filepath)[-1])
-            if file_ext != '.py':
-                continue
+        norm_pattern = re.compile(r'[/|.]')
 
-            log.debug('Importing plugin module %s', filepath)
-            # normalize root path as namespace
-            namespace = '_'.join([re.sub(norm_pattern, '__', root), mod_name])
+        # Crawl through the plugins folder to find AirflowPlugin derivatives
+        for root, dirs, files in os.walk(self._plugins_folder, followlinks=True):
+            for f in files:
+                try:
+                    filepath = os.path.join(root, f)
+                    if not os.path.isfile(filepath):
+                        continue
+                    mod_name, file_ext = os.path.splitext(
+                        os.path.split(filepath)[-1])
+                    if file_ext != '.py':
+                        continue
 
-            m = imp.load_source(namespace, filepath)
-            for obj in list(m.__dict__.values()):
-                if is_valid_plugin(obj, plugins):
-                    plugins.append(obj)
+                    log.debug('Importing plugin module %s', filepath)
+                    # normalize root path as namespace
+                    namespace = '_'.join([re.sub(norm_pattern, '__', root), mod_name])
 
-        except Exception as e:
-            log.exception(e)
-            log.error('Failed to import plugin %s', filepath)
-            import_errors[filepath] = str(e)
+                    m = imp.load_source(namespace, filepath)
+                    for obj in list(m.__dict__.values()):
+                        if (
+                            inspect.isclass(obj) and
+                            issubclass(obj, AirflowPlugin) and
+                            obj is not AirflowPlugin):
+                            obj.validate()
+                            if obj not in self._plugins:
+                                self._plugins.append(obj)
 
-plugins = load_entrypoint_plugins(
-    pkg_resources.iter_entry_points('airflow.plugins'),
-    plugins
-)
+                except Exception as e:
+                    log.exception(e)
+                    log.error('Failed to import plugin %s', filepath)
+                    import_errors[filepath] = str(e)
+        return self
+
+    def publish_plugins(self):
+        # Plugin components to integrate as modules
+        operators_modules = []
+        sensors_modules = []
+        hooks_modules = []
+        executors_modules = []
+        macros_modules = []
+
+        # Plugin components to integrate directly
+        admin_views = []
+        flask_blueprints = []
+        menu_links = []
+        flask_appbuilder_views = []
+        flask_appbuilder_menu_links = []
+
+        for p in self._plugins:
+            operators_modules.append(
+                self._make_module('airflow.operators.' + p.name, p.operators + p.sensors))
+            sensors_modules.append(
+                self._make_module('airflow.sensors.' + p.name, p.sensors))
+            hooks_modules.append(
+                self._make_module('airflow.hooks.' + p.name, p.hooks))
+            executors_modules.append(
+                self._make_module('airflow.executors.' + p.name, p.executors))
+            macros_modules.append(
+                self._make_module('airflow.macros.' + p.name, p.macros))
+
+            admin_views.extend(p.admin_views)
+            flask_blueprints.extend(p.flask_blueprints)
+            menu_links.extend(p.menu_links)
+            flask_appbuilder_views.extend(p.appbuilder_views)
+            flask_appbuilder_menu_links.extend(p.appbuilder_menu_items)
+
+        return (
+            operators_modules,
+            sensors_modules,
+            hooks_modules,
+            executors_modules,
+            macros_modules,
+            admin_views,
+            flask_blueprints,
+            menu_links,
+            flask_appbuilder_views,
+            flask_appbuilder_menu_links
+        )
+
+    @staticmethod
+    def _make_module(name, objects):
+        log.debug('Creating module %s', name)
+        name = name.lower()
+        module = imp.new_module(name)
+        module._name = name.split('.')[-1]
+        module._objects = objects
+        module.__dict__.update((o.__name__, o) for o in objects)
+        return module
 
 
-def make_module(name, objects):
-    log.debug('Creating module %s', name)
-    name = name.lower()
-    module = imp.new_module(name)
-    module._name = name.split('.')[-1]
-    module._objects = objects
-    module.__dict__.update((o.__name__, o) for o in objects)
-    return module
+[
+    # Plugin components to integrate as modules
+    operators_modules,
+    sensors_modules,
+    hooks_modules,
+    executors_modules,
+    macros_modules,
 
-
-# Plugin components to integrate as modules
-operators_modules = []
-sensors_modules = []
-hooks_modules = []
-executors_modules = []
-macros_modules = []
-
-# Plugin components to integrate directly
-admin_views = []
-flask_blueprints = []
-menu_links = []
-flask_appbuilder_views = []
-flask_appbuilder_menu_links = []
-
-for p in plugins:
-    operators_modules.append(
-        make_module('airflow.operators.' + p.name, p.operators + p.sensors))
-    sensors_modules.append(
-        make_module('airflow.sensors.' + p.name, p.sensors)
-    )
-    hooks_modules.append(make_module('airflow.hooks.' + p.name, p.hooks))
-    executors_modules.append(
-        make_module('airflow.executors.' + p.name, p.executors))
-    macros_modules.append(make_module('airflow.macros.' + p.name, p.macros))
-
-    admin_views.extend(p.admin_views)
-    flask_blueprints.extend(p.flask_blueprints)
-    menu_links.extend(p.menu_links)
-    flask_appbuilder_views.extend(p.appbuilder_views)
-    flask_appbuilder_menu_links.extend(p.appbuilder_menu_items)
+    # Plugin components to integrate directly
+    admin_views,
+    flask_blueprints,
+    menu_links,
+    flask_appbuilder_views,
+    flask_appbuilder_menu_links
+] = PluginsManager(
+    configuration=configuration.conf
+).load_plugins_from_disk().publish_plugins()
