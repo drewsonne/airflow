@@ -241,6 +241,8 @@ webhdfs = ['hdfs[dataframe,avro,kerberos]>=2.0.4']
 winrm = ['pywinrm==0.2.2']
 zendesk = ['zdesk']
 
+aws = s3 +['expiringdict']
+
 all_dbs = postgres + mysql + hive + mssql + hdfs + vertica + cloudant + druid + pinot \
     + cassandra + mongo
 
@@ -346,6 +348,7 @@ def do_setup():
             'devel_ci': devel_ci,
             'all_dbs': all_dbs,
             'atlas': atlas,
+            'aws': aws,
             'async': async_packages,
             'azure_blob_storage': azure_blob_storage,
             'azure_data_lake': azure_data_lake,
@@ -422,6 +425,11 @@ def do_setup():
             'compile_assets': CompileAssets
         },
         python_requires='>=2.7,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*',
+        entry_points = {
+            'airflow.plugins': [
+                'aws = airflow.plugins.aws:AwsPlugin [aws]'
+            ]
+        }
     )
 
 
