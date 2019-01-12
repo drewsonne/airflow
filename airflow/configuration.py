@@ -23,6 +23,8 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 from base64 import b64encode
+from operator import attrgetter
+
 from builtins import str
 from collections import OrderedDict
 import copy
@@ -160,6 +162,15 @@ class AirflowConfigParser(ConfigParser):
             self.airflow_defaults.read_string(default_config)
 
         self.is_validated = False
+        self._provider_chain = []
+
+    def _integrate_plugins(self, configuration_providers):
+        # Build Provider chain by precedence
+        provider_classes = sorted(configuration_providers, key=attrgetter('priority'))
+        self._provider_chain = [
+            c(self.getsection('conf_provider'))
+            for c in provider_classes
+        ]
 
     def _validate(self):
         if (
@@ -220,6 +231,17 @@ class AirflowConfigParser(ConfigParser):
             if option is not None:
                 self._warn_deprecate(section, key, deprecated_name)
                 return option
+
+        # ... then work through the configuration provider chain
+        for provider in self._provider_chain:
+            option = provider(self).get_var_option(section, key)
+            if option is not None:
+                return option
+            if deprecated_name:
+                option = provider.get_var_option(section, key)
+                if option is not None:
+                    self._warn_deprecate(section, key, deprecated_name)
+                    return option
 
         # ...then the config file
         if super(AirflowConfigParser, self).has_option(section, key):
@@ -323,6 +345,11 @@ class AirflowConfigParser(ConfigParser):
 
         if section in self._sections:
             _section.update(copy.deepcopy(self._sections[section]))
+
+        for provider in self._provider_chain:
+            if provider.hassection(section):
+                _provider_section = provider.getsection()
+                _section.update(_provider_section)
 
         section_prefix = 'AIRFLOW__{S}__'.format(S=section.upper())
         for env_var in sorted(os.environ.keys()):
@@ -554,6 +581,7 @@ has_option = conf.has_option
 remove_option = conf.remove_option
 as_dict = conf.as_dict
 set = conf.set # noqa
+load_configuration_providers = conf._integrate_plugins
 
 for func in [load_test_config, get, getboolean, getfloat, getint, has_option,
              remove_option, as_dict, set]:

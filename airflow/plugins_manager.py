@@ -44,16 +44,18 @@ class AirflowPluginException(Exception):
 
 class AirflowPlugin(object):
     name = None
+
+    admin_views = []
+    appbuilder_menu_items = []
+    appbuilder_views = []
+    configuration_providers = []
+    executors = []
+    flask_blueprints = []
+    hooks = []
+    macros = []
+    menu_links = []
     operators = []
     sensors = []
-    hooks = []
-    executors = []
-    macros = []
-    admin_views = []
-    flask_blueprints = []
-    menu_links = []
-    appbuilder_views = []
-    appbuilder_menu_items = []
 
     @classmethod
     def validate(cls):
@@ -169,32 +171,36 @@ def make_module(name, objects):
 
 
 # Plugin components to integrate as modules
+executors_modules = []
+hooks_modules = []
+macros_modules = []
 operators_modules = []
 sensors_modules = []
-hooks_modules = []
-executors_modules = []
-macros_modules = []
 
 # Plugin components to integrate directly
 admin_views = []
+configuration_providers = []
+flask_appbuilder_menu_links = []
+flask_appbuilder_views = []
 flask_blueprints = []
 menu_links = []
-flask_appbuilder_views = []
-flask_appbuilder_menu_links = []
 
 for p in plugins:
+    executors_modules.append(
+        make_module('airflow.executors.' + p.name, p.executors))
+    hooks_modules.append(make_module('airflow.hooks.' + p.name, p.hooks))
+    macros_modules.append(make_module('airflow.macros.' + p.name, p.macros))
     operators_modules.append(
         make_module('airflow.operators.' + p.name, p.operators + p.sensors))
     sensors_modules.append(
         make_module('airflow.sensors.' + p.name, p.sensors)
     )
-    hooks_modules.append(make_module('airflow.hooks.' + p.name, p.hooks))
-    executors_modules.append(
-        make_module('airflow.executors.' + p.name, p.executors))
-    macros_modules.append(make_module('airflow.macros.' + p.name, p.macros))
 
     admin_views.extend(p.admin_views)
+    configuration_providers.extend(configuration_providers)
+    flask_appbuilder_menu_links.extend(p.appbuilder_menu_items)
+    flask_appbuilder_views.extend(p.appbuilder_views)
     flask_blueprints.extend(p.flask_blueprints)
     menu_links.extend(p.menu_links)
-    flask_appbuilder_views.extend(p.appbuilder_views)
-    flask_appbuilder_menu_links.extend(p.appbuilder_menu_items)
+
+configuration.load_configuration_providers(configuration_providers)
