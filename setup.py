@@ -241,7 +241,7 @@ webhdfs = ['hdfs[dataframe,avro,kerberos]>=2.0.4']
 winrm = ['pywinrm==0.2.2']
 zendesk = ['zdesk']
 
-aws = s3 +['expiringdict']
+aws = s3 + ['expiringdict']
 
 all_dbs = postgres + mysql + hive + mssql + hdfs + vertica + cloudant + druid + pinot \
     + cassandra + mongo
@@ -425,7 +425,7 @@ def do_setup():
             'compile_assets': CompileAssets
         },
         python_requires='>=2.7,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*',
-        entry_points = {
+        entry_points={
             'airflow.plugins': [
                 'aws = airflow.plugins.aws:AwsPlugin [aws]'
             ]

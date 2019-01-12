@@ -49,7 +49,7 @@ class AirflowConfigurationProviderPlugin(object):
         raise NotImplementedError
 
     @abstractmethod
-    def as_dict(self,display_source=False, display_sensitive=False):
+    def as_dict(self, display_source=False, display_sensitive=False):
         """
         Fetch all configuration sections
 
