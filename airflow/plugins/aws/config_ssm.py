@@ -42,6 +42,12 @@ class AwsSsmConfigurationProvider(AirflowConfigurationProviderPlugin):
     def source_name(self):
         return 'aws ssm'
 
+<<<<<<< Updated upstream
+=======
+    def as_dict(self, display_source=False, display_sensitive=False):
+        root_section = self.get_section('')
+
+>>>>>>> Stashed changes
     def __init__(self, conf):
         super(AwsSsmConfigurationProvider, self).__init__(conf)
 
