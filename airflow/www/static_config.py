@@ -21,6 +21,10 @@ from __future__ import print_function
 import json
 import os
 
+import pkg_resources
+
+from airflow import resource
+
 manifest = dict()
 
 
@@ -35,10 +39,9 @@ def configure_manifest_files(app):
         # noinspection PyBroadException
         try:
             global manifest
-            manifest_file = os.path.join(os.path.dirname(__file__),
-                                         'static/dist/manifest.json')
-            with open(manifest_file, 'r') as f:
-                manifest.update(json.load(f))
+            manifest.update(
+                resource.json_string('static/dist/manifest.json')
+            )
         except Exception:
             print("Please make sure to build the frontend in "
                   "static/ directory and restart the server")

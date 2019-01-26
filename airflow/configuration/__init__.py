@@ -17,28 +17,27 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, print_function, unicode_literals
 
-from base64 import b64encode
-from builtins import str
-from collections import OrderedDict
 import copy
 import errno
-from future import standard_library
 import os
 import shlex
-import six
-from six import iteritems
 import subprocess
 import sys
 import warnings
+from base64 import b64encode
+from builtins import str
+from collections import OrderedDict
 
+import six
 from backports.configparser import ConfigParser
+from future import standard_library
+from six import iteritems
 from zope.deprecation import deprecated
 
+from airflow.configuration import resource, env_var
+from airflow.configuration.path import AIRFLOW_HOME, DEFAULT_CONFIG_PATH, TEST_CONFIG_PATH, AIRFLOW_CONFIG_PATH
 from airflow.exceptions import AirflowConfigException
 from airflow.utils.log.logging_mixin import LoggingMixin
 
@@ -62,22 +61,6 @@ def generate_fernet_key():
         return Fernet.generate_key().decode()
 
 
-def expand_env_var(env_var):
-    """
-    Expands (potentially nested) env vars by repeatedly applying
-    `expandvars` and `expanduser` until interpolation stops having
-    any effect.
-    """
-    if not env_var:
-        return env_var
-    while True:
-        interpolated = os.path.expanduser(os.path.expandvars(str(env_var)))
-        if interpolated == env_var:
-            return interpolated
-        else:
-            env_var = interpolated
-
-
 def run_command(command):
     """
     Runs command and returns stdout
@@ -93,30 +76,17 @@ def run_command(command):
     if process.returncode != 0:
         raise AirflowConfigException(
             "Cannot execute {}. Error code is: {}. Output: {}, Stderr: {}"
-            .format(command, process.returncode, output, stderr)
+                .format(command, process.returncode, output, stderr)
         )
 
     return output
 
 
-def _read_default_config_file(file_name):
-    templates_dir = os.path.join(os.path.dirname(__file__), 'config_templates')
-    file_path = os.path.join(templates_dir, file_name)
-    if six.PY2:
-        with open(file_path) as f:
-            config = f.read()
-            return config.decode('utf-8')
-    else:
-        with open(file_path, encoding='utf-8') as f:
-            return f.read()
-
-
-DEFAULT_CONFIG = _read_default_config_file('default_airflow.cfg')
-TEST_CONFIG = _read_default_config_file('default_test.cfg')
+DEFAULT_CONFIG = resource.pkg_string(path.DEFAULT_CONFIG)
+TEST_CONFIG = resource.pkg_string(path.TEST_CONFIG)
 
 
 class AirflowConfigParser(ConfigParser):
-
     # These configuration elements can be fetched as the stdout of commands
     # following the "{section}__{name}__cmd" pattern, the idea behind this
     # is to not store password on boxes in text files.
@@ -163,8 +133,8 @@ class AirflowConfigParser(ConfigParser):
 
     def _validate(self):
         if (
-                self.get("core", "executor") != 'SequentialExecutor' and
-                "sqlite" in self.get('core', 'sql_alchemy_conn')):
+            self.get("core", "executor") != 'SequentialExecutor' and
+            "sqlite" in self.get('core', 'sql_alchemy_conn')):
             raise AirflowConfigException(
                 "error: cannot use sqlite with the {}".format(
                     self.get('core', 'executor')))
@@ -200,7 +170,7 @@ class AirflowConfigParser(ConfigParser):
         # if this is a valid command key...
         if (section, key) in self.as_command_stdout:
             if super(AirflowConfigParser, self) \
-                    .has_option(section, fallback_key):
+                .has_option(section, fallback_key):
                 command = super(AirflowConfigParser, self) \
                     .get(section, fallback_key)
                 return run_command(command)
@@ -225,12 +195,12 @@ class AirflowConfigParser(ConfigParser):
         if super(AirflowConfigParser, self).has_option(section, key):
             # Use the parent's methods to get the actual config here to be able to
             # separate the config from default config.
-            return expand_env_var(
+            return env_var.expand(
                 super(AirflowConfigParser, self).get(section, key, **kwargs))
         if deprecated_name:
             if super(AirflowConfigParser, self).has_option(section, deprecated_name):
                 self._warn_deprecate(section, key, deprecated_name)
-                return expand_env_var(super(AirflowConfigParser, self).get(
+                return env_var.expand(super(AirflowConfigParser, self).get(
                     section,
                     deprecated_name,
                     **kwargs
@@ -248,7 +218,7 @@ class AirflowConfigParser(ConfigParser):
 
         # ...then the default config
         if self.airflow_defaults.has_option(section, key):
-            return expand_env_var(
+            return env_var.expand(
                 self.airflow_defaults.get(section, key, **kwargs))
 
         else:
@@ -316,7 +286,7 @@ class AirflowConfigParser(ConfigParser):
         :return: dict
         """
         if (section not in self._sections and
-                section not in self.airflow_defaults._sections):
+            section not in self.airflow_defaults._sections):
             return None
 
         _section = copy.deepcopy(self.airflow_defaults._sections[section])
@@ -345,7 +315,7 @@ class AirflowConfigParser(ConfigParser):
         return _section
 
     def as_dict(
-            self, display_source=False, display_sensitive=False, raw=False):
+        self, display_source=False, display_sensitive=False, raw=False):
         """
         Returns the current configuration as an OrderedDict of OrderedDicts.
         :param display_source: If False, the option value is returned. If True,
@@ -441,23 +411,14 @@ def mkdir_p(path):
                 'Error creating {}: {}'.format(path, exc.strerror))
 
 
-def get_airflow_home():
-    return expand_env_var(os.environ.get('AIRFLOW_HOME', '~/airflow'))
 
 
-def get_airflow_config(airflow_home):
-    if 'AIRFLOW_CONFIG' not in os.environ:
-        return os.path.join(airflow_home, 'airflow.cfg')
-    return expand_env_var(os.environ['AIRFLOW_CONFIG'])
 
 
 # Setting AIRFLOW_HOME and AIRFLOW_CONFIG from environment variables, using
 # "~/airflow" and "$AIRFLOW_HOME/airflow.cfg" respectively as defaults.
 
-AIRFLOW_HOME = get_airflow_home()
-AIRFLOW_CONFIG = get_airflow_config(AIRFLOW_HOME)
 mkdir_p(AIRFLOW_HOME)
-
 
 # Set up dags folder for unit tests
 # this directory won't exist if users install via pip
@@ -494,7 +455,7 @@ def parameterized_config(template):
 TEST_CONFIG_FILE = AIRFLOW_HOME + '/unittests.cfg'
 
 # only generate a Fernet key if we need to create a new config file
-if not os.path.isfile(TEST_CONFIG_FILE) or not os.path.isfile(AIRFLOW_CONFIG):
+if not os.path.isfile(TEST_CONFIG_FILE) or not os.path.isfile(path.AIRFLOW_CONFIG):
     FERNET_KEY = generate_fernet_key()
 else:
     FERNET_KEY = ''
@@ -510,31 +471,31 @@ if not os.path.isfile(TEST_CONFIG_FILE):
     with open(TEST_CONFIG_FILE, 'w') as f:
         cfg = parameterized_config(TEST_CONFIG)
         f.write(cfg.split(TEMPLATE_START)[-1].strip())
-if not os.path.isfile(AIRFLOW_CONFIG):
+if not os.path.isfile(path.AIRFLOW_CONFIG):
     log.info(
         'Creating new Airflow config file in: %s',
-        AIRFLOW_CONFIG
+        path.AIRFLOW_CONFIG
     )
-    with open(AIRFLOW_CONFIG, 'w') as f:
+    with open(path.AIRFLOW_CONFIG, 'w') as f:
         cfg = parameterized_config(DEFAULT_CONFIG)
         cfg = cfg.split(TEMPLATE_START)[-1].strip()
         if six.PY2:
             cfg = cfg.encode('utf8')
         f.write(cfg)
 
-log.info("Reading the config from %s", AIRFLOW_CONFIG)
+log.info("Reading the config from %s", path.AIRFLOW_CONFIG)
 
 conf = AirflowConfigParser(default_config=parameterized_config(DEFAULT_CONFIG))
 
-conf.read(AIRFLOW_CONFIG)
+conf.read(path.AIRFLOW_CONFIG)
 
-DEFAULT_WEBSERVER_CONFIG = _read_default_config_file('default_webserver_config.py')
+DEFAULT_WEBSERVER_CONFIG = resource.pkg_string(
+    'config_templates', 'default_webserver_config.py')
 
-WEBSERVER_CONFIG = AIRFLOW_HOME + '/webserver_config.py'
 
-if not os.path.isfile(WEBSERVER_CONFIG):
-    log.info('Creating new FAB webserver config file in: %s', WEBSERVER_CONFIG)
-    with open(WEBSERVER_CONFIG, 'w') as f:
+if not os.path.isfile(path.WEBSERVER_CONFIG):
+    log.info('Creating new FAB webserver config file in: %s', path.WEBSERVER_CONFIG)
+    with open(path.WEBSERVER_CONFIG, 'w') as f:
         f.write(DEFAULT_WEBSERVER_CONFIG)
 
 if conf.getboolean('core', 'unit_test_mode'):
@@ -551,7 +512,7 @@ getsection = conf.getsection
 has_option = conf.has_option
 remove_option = conf.remove_option
 as_dict = conf.as_dict
-set = conf.set # noqa
+set = conf.set  # noqa
 
 for func in [load_test_config, get, getboolean, getfloat, getint, has_option,
              remove_option, as_dict, set]:
