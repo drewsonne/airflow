@@ -75,6 +75,8 @@ if [ -z "$nose_args" ]; then
   --cover-package=airflow \
   --cover-html-dir=airflow/www/static/coverage \
   --with-ignore-docstrings \
+  --process-restartworker \
+  --processes=3 \
   --rednose \
   --with-timer \
   -v \

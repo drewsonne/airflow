@@ -33,8 +33,15 @@ env:
     - TOX_ENV=py35-backend_mysql-env_docker PYTHON_VERSION=3
     - TOX_ENV=py35-backend_sqlite-env_docker PYTHON_VERSION=3
     - TOX_ENV=py35-backend_postgres-env_docker PYTHON_VERSION=3
+    - TOX_ENV=py37-backend_mysql-env_docker PYTHON_VERSION=3
+    - TOX_ENV=py37-backend_sqlite-env_docker PYTHON_VERSION=3
+    - TOX_ENV=py37-backend_postgres-env_docker PYTHON_VERSION=3
     - TOX_ENV=py27-backend_postgres-env_kubernetes KUBERNETES_VERSION=v1.9.0
     - TOX_ENV=py35-backend_postgres-env_kubernetes KUBERNETES_VERSION=v1.10.0 PYTHON_VERSION=3
+    - TOX_ENV=py37-backend_postgres-env_kubernetes KUBERNETES_VERSION=v1.10.0 PYTHON_VERSION=3
+
+matrix:
+  fast_finish: true
 
 stages:
   - pre-test
@@ -44,9 +51,13 @@ jobs:
   include:
     - name: Flake8
       stage: pre-test
+      install:
+      before_install:
       script: pip install flake8 && flake8
     - name: Check license header
       stage: pre-test
+      install:
+      before_install:
       script: scripts/ci/6-check-license.sh
 
 cache:
