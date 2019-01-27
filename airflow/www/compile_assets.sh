@@ -17,12 +17,18 @@
 
 set -e
 
+airflow_www_home="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+# Go to our web dir
+pushd ${airflow_www_home}
+
 # first bump up package.json manually, commit and tag
-if [ -d airflow/www/static/dist ]; then
-  rm airflow/www/static/dist/*
+if [ -d static/dist ]; then
+  rm static/dist/*
 fi
 
-cd airflow/www/
 npm install
 npm run build
-cd ../..
+
+# Go back to wherever we were before we started
+popd
