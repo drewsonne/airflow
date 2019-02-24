@@ -18,19 +18,18 @@
 # under the License.
 #
 import logging
-import socket
-import six
 
+import six
+import socket
 from flask import Flask
 from flask_appbuilder import AppBuilder, SQLA
 from flask_caching import Cache
 from flask_wtf.csrf import CSRFProtect
 from six.moves.urllib.parse import urlparse
-from werkzeug.wsgi import DispatcherMiddleware
 from werkzeug.contrib.fixers import ProxyFix
+from werkzeug.wsgi import DispatcherMiddleware
 
-from airflow import settings
-from airflow import configuration as conf
+from airflow import configuration as conf, settings
 from airflow.logging_config import configure_logging
 from airflow.www.static_config import configure_manifest_files
 import warnings
@@ -81,7 +80,7 @@ def create_app(config=None, session=None, testing=False, app_name="Airflow"):
 
         from airflow.www.security import AirflowSecurityManager
         security_manager_class = app.config.get('SECURITY_MANAGER_CLASS') or \
-            AirflowSecurityManager
+                                 AirflowSecurityManager
 
         if not issubclass(security_manager_class, AirflowSecurityManager):
             raise Exception(
@@ -159,7 +158,6 @@ def create_app(config=None, session=None, testing=False, app_name="Airflow"):
                             "Using 'view' has been deprecated and will be removed in future versions.",
                             DeprecationWarning,
                         )
-
                     appbuilder.add_view(**v)
                 for ml in sorted(flask_appbuilder_menu_links, key=lambda x: x["name"]):
                     log.debug("Adding menu link %s", ml["name"])
