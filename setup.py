@@ -194,10 +194,10 @@ hive = [
 jdbc = ['jaydebeapi>=1.1.1']
 jenkins = ['python-jenkins>=1.0.0']
 jira = ['JIRA>1.0.7']
-kerberos = ['pykerberos>=1.1.13',
-            'requests_kerberos>=0.10.0',
-            'thrift_sasl>=0.2.0',
-            'snakebite[kerberos]>=2.7.8']
+kerberos = ['gssapi>=1.1.13',
+            'requests_kerberos>=0.12.0',
+            'thrift_sasl>=0.3.0',
+            'snakebite[kerberos]>=2.11.0']
 kubernetes = ['kubernetes>=3.0.0',
               'cryptography>=2.0.0']
 ldap = ['ldap3>=2.5.1']
