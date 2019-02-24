@@ -17,18 +17,16 @@
 # specific language governing permissions and limitations
 # under the License.
 #
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-from __future__ import unicode_literals
+from __future__ import absolute_import, division, print_function, unicode_literals
 
-from builtins import object
 import imp
 import inspect
 import os
 import re
 import sys
+
 import pkg_resources
+from builtins import object
 
 from airflow import configuration
 from airflow.utils.log.logging_mixin import LoggingMixin
@@ -37,12 +35,28 @@ log = LoggingMixin().log
 
 import_errors = {}
 
+# Plugin components to integrate as modules
+operators_modules = []
+sensors_modules = []
+hooks_modules = []
+executors_modules = []
+macros_modules = []
+
+# Plugin components to integrate directly
+admin_views = []
+flask_blueprints = []
+menu_links = []
+flask_appbuilder_views = []
+flask_appbuilder_menu_links = []
+
 
 class AirflowPluginException(Exception):
     pass
 
 
 class AirflowPlugin(object):
+    LOAD_TYPE_FILE = 'file'
+    LOAD_TYPE_PKG = 'pkg'
     name = None
     operators = []
     sensors = []
@@ -54,6 +68,9 @@ class AirflowPlugin(object):
     menu_links = []
     appbuilder_views = []
     appbuilder_menu_items = []
+
+    load_type = None
+    load_path = None
 
     @classmethod
     def validate(cls):
@@ -70,6 +87,34 @@ class AirflowPlugin(object):
         :param kwargs: If future arguments are passed in on call.
         """
         pass
+
+    @classmethod
+    def on_app_load(cls, app, *args, **kwargs):
+        """
+        Executed after the flask app is loaded.
+
+        :param args: If future arguments are passed in on call.
+        :param kwargs: If future arguments are passed in on call.
+        """
+        pass
+
+    @classmethod
+    def get_module(cls):
+        if cls.load_type == cls.LOAD_TYPE_FILE:
+            return cls.load_path + ':' + cls.__name__
+        else:
+            return cls.__module__ + '.' + cls.__name__
+
+    @classmethod
+    def register_appbuilder_view(cls, appbuilder_view):
+        flask_appbuilder_views.append(appbuilder_view)
+
+    @classmethod
+    def register_flask_blueprints(cls, blueprint):
+        flask_blueprints.append({
+            'name': blueprint.name,
+            'blueprint': blueprint
+        })
 
 
 def load_entrypoint_plugins(entry_points, airflow_plugins):
@@ -90,6 +135,7 @@ def load_entrypoint_plugins(entry_points, airflow_plugins):
         if is_valid_plugin(plugin_obj, airflow_plugins):
             if callable(getattr(plugin_obj, 'on_load', None)):
                 plugin_obj.on_load()
+                plugin_obj.load_type = AirflowPlugin.LOAD_TYPE_PKG
                 airflow_plugins.append(plugin_obj)
     return airflow_plugins
 
@@ -145,6 +191,8 @@ for root, dirs, files in os.walk(plugins_folder, followlinks=True):
             m = imp.load_source(namespace, filepath)
             for obj in list(m.__dict__.values()):
                 if is_valid_plugin(obj, plugins):
+                    obj.load_type = AirflowPlugin.LOAD_TYPE_FILE
+                    obj.load_path = filepath
                     plugins.append(obj)
 
         except Exception as e:
@@ -168,20 +216,6 @@ def make_module(name, objects):
     return module
 
 
-# Plugin components to integrate as modules
-operators_modules = []
-sensors_modules = []
-hooks_modules = []
-executors_modules = []
-macros_modules = []
-
-# Plugin components to integrate directly
-admin_views = []
-flask_blueprints = []
-menu_links = []
-flask_appbuilder_views = []
-flask_appbuilder_menu_links = []
-
 for p in plugins:
     operators_modules.append(
         make_module('airflow.operators.' + p.name, p.operators + p.sensors))
@@ -195,9 +229,10 @@ for p in plugins:
 
     admin_views.extend(p.admin_views)
     menu_links.extend(p.menu_links)
-    flask_appbuilder_views.extend(p.appbuilder_views)
     flask_appbuilder_menu_links.extend(p.appbuilder_menu_items)
-    flask_blueprints.extend([{
-        'name': p.name,
-        'blueprint': bp
-    } for bp in p.flask_blueprints])
+
+    for bp in p.flask_blueprints:
+        p.register_flask_blueprints(bp)
+
+    for abv in p.appbuilder_views:
+        p.register_appbuilder_view(abv)
